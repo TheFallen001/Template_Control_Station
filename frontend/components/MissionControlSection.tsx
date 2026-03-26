@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import MapViewer from "@/components/MapViewer";
+import ChatBox from "@/components/ChatBox";
 
 export default function MissionControlSection() {
     const containerVariants = {
@@ -34,7 +35,7 @@ export default function MissionControlSection() {
             exit="exit"
             style={{
                 display: "flex",
-                flexDirection: "column",
+                flexDirection: "row",
                 gap: "1.25rem",
                 flex: 1,
                 height: "100%",
@@ -42,6 +43,9 @@ export default function MissionControlSection() {
         >
             <motion.div variants={widgetVariants} style={{ flex: 1, minHeight: 0 }}>
                 <MapViewer />
+            </motion.div>
+            <motion.div variants={widgetVariants} style={{ display: "flex", minHeight: 0 }}>
+                <ChatBox />
             </motion.div>
         </motion.div>
     );
