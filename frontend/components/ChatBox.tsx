@@ -28,8 +28,9 @@ interface llmResponse {
 
 interface vlmResponse {
     found: boolean;
-    identifiedObjectLabel: string;
-    objectLocation: coordinates;
+    identifiedObjectLabel?: string;
+    objectLocation?: coordinates;
+    is_active: boolean;
 }
 
 export default function ChatBox() {
@@ -122,19 +123,14 @@ export default function ChatBox() {
         };
     }, []);
 
-    const pollVLMUpdates = async (descriptionPrompt: string) => {
-        let isSearching = true;
-
+    const pollVLMUpdates = async () => {
         const pollInterval = setInterval(async () => {
             try {
-                const response = await fetch(`${BACKEND_URL}/contactVLM`, {
-                    method: "POST",
+                const response = await fetch(`${BACKEND_URL}/pollState`, {
+                    method: "GET",
                     headers: {
                         "Content-Type": "application/json",
                     },
-                    body: JSON.stringify({
-                        message: descriptionPrompt,
-                    }),
                 });
 
                 if (!response.ok) {
@@ -145,35 +141,71 @@ export default function ChatBox() {
                         timestamp: new Date(),
                     };
                     setMessages((prev) => [...prev, errorMessage]);
+                    clearInterval(pollInterval);
+                    pollingIntervalRef.current = null;
+                    setIsLoading(false);
                     return;
                 }
 
                 const data = (await response.json()) as vlmResponse;
 
-                // Add update message with object label and location
-                const updateMessage: Message = {
-                    id: Date.now().toString(),
-                    text: `Searching... Found possible ${data.identifiedObjectLabel} at [x: ${data.objectLocation.x}, y: ${data.objectLocation.y}, yaw: ${data.objectLocation.yaw}]`,
-                    sender: "system",
-                    timestamp: new Date(),
-                };
-                setMessages((prev) => [...prev, updateMessage]);
-
-                // If object is found, stop polling
-                if (data.found) {
-                    isSearching = false;
+                // If object is found, stop polling and cleanup
+                if (data.found && data.objectLocation) {
                     clearInterval(pollInterval);
                     pollingIntervalRef.current = null;
                     setIsLoading(false);
 
                     const successMessage: Message = {
                         id: (Date.now() + 1).toString(),
-                        text: `✓ Object found! ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x}, y: ${data.objectLocation.y}, yaw: ${data.objectLocation.yaw}]`,
+                        text: `✓ Object found! ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
                         sender: "system",
                         timestamp: new Date(),
                     };
                     setMessages((prev) => [...prev, successMessage]);
                     setContactVLM(false);
+                    
+                    // CRITICAL FIX #7: Clear search on backend for next search
+                    try {
+                        await fetch(`${BACKEND_URL}/cancelSearch`, { method: "POST" });
+                    } catch (e) {
+                        console.error("Failed to clear search:", e);
+                    }
+                    return;
+                }
+
+                // If search is no longer active, stop polling and cleanup
+                if (!data.is_active) {
+                    clearInterval(pollInterval);
+                    pollingIntervalRef.current = null;
+                    setIsLoading(false);
+
+                    const stoppedMessage: Message = {
+                        id: Date.now().toString(),
+                        text: "Search completed without finding the target object. Please try another search with a different description.",
+                        sender: "system",
+                        timestamp: new Date(),
+                    };
+                    setMessages((prev) => [...prev, stoppedMessage]);
+                    setContactVLM(false);
+                    
+                    // CRITICAL FIX #7: Clear search on backend for next search
+                    try {
+                        await fetch(`${BACKEND_URL}/cancelSearch`, { method: "POST" });
+                    } catch (e) {
+                        console.error("Failed to clear search:", e);
+                    }
+                    return;
+                }
+
+                // Still searching - show progress update
+                if (data.identifiedObjectLabel) {
+                    const updateMessage: Message = {
+                        id: Date.now().toString(),
+                        text: `Searching... Explored area with ${data.identifiedObjectLabel}`,
+                        sender: "system",
+                        timestamp: new Date(),
+                    };
+                    setMessages((prev) => [...prev, updateMessage]);
                 }
             } catch (error) {
                 const errorMessage: Message = {
@@ -183,6 +215,9 @@ export default function ChatBox() {
                     timestamp: new Date(),
                 };
                 setMessages((prev) => [...prev, errorMessage]);
+                clearInterval(pollInterval);
+                pollingIntervalRef.current = null;
+                setIsLoading(false);
             }
         }, pollRate); // Poll every 2 seconds
 
@@ -262,7 +297,7 @@ export default function ChatBox() {
                 setIsLoading(false);
             }
         } else {
-            // Contact VLM and start polling for updates
+            // Contact VLM to start search and begin polling for updates
             const startingMessage: Message = {
                 id: Date.now().toString(),
                 text: "Robot starting visual search...",
@@ -270,7 +305,45 @@ export default function ChatBox() {
                 timestamp: new Date(),
             };
             setMessages((prev) => [...prev, startingMessage]);
-            await pollVLMUpdates(currentInput);
+
+            try {
+                // Initial POST to /contactVLM to start the search
+                const startResponse = await fetch(`${BACKEND_URL}/contactVLM`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        message: currentInput,
+                    }),
+                });
+
+                if (!startResponse.ok) {
+                    const errorMessage: Message = {
+                        id: Date.now().toString(),
+                        text: "Failed to start VLM search",
+                        sender: "system",
+                        timestamp: new Date(),
+                    };
+                    setMessages((prev) => [...prev, errorMessage]);
+                    setIsLoading(false);
+                    return;
+                }
+
+                const initialData = (await startResponse.json()) as vlmResponse;
+                
+                // Start polling /pollState for updates
+                await pollVLMUpdates();
+            } catch (error) {
+                const errorMessage: Message = {
+                    id: Date.now().toString(),
+                    text: `Error starting search: ${error instanceof Error ? error.message : "Unknown error"}`,
+                    sender: "system",
+                    timestamp: new Date(),
+                };
+                setMessages((prev) => [...prev, errorMessage]);
+                setIsLoading(false);
+            }
         }
     }    
     return (
