@@ -3,9 +3,18 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Send, Mic, Pause } from "lucide-react";
+import { useRosPublisher } from "@/lib/useRosPublisher";
 
 const BACKEND_URL = "http://localhost:8000";
 const pollRate = 2000; // Poll every 2 seconds
+
+interface GoalPoseMsg {
+    header: { frame_id: string };
+    pose: {
+        position: { x: number; y: number; z: number };
+        orientation: { x: number; y: number; z: number; w: number };
+    };
+}
 
 interface Message {
     id: string;
@@ -44,6 +53,9 @@ export default function ChatBox() {
 
     const [isRecording, setIsRecording] = useState(false);
     const recognitionRef = useRef<any>(null);
+
+    // ROS Publisher for goal positions
+    const publishGoal = useRosPublisher<GoalPoseMsg>("/goal_pose", { messageType: "geometry_msgs/PoseStamped" });
 
     const initializeSpeechRecognition = () => {
         if (typeof window !== "undefined") {
@@ -106,6 +118,16 @@ export default function ChatBox() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    const sendGoalToRobot = (x: number, y: number, yaw: number = 0) => {
+        publishGoal({
+            header: { frame_id: "map" },
+            pose: {
+                position: { x, y, z: 0 },
+                orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) }
+            }
+        });
+    };
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
@@ -157,11 +179,12 @@ export default function ChatBox() {
 
                     const successMessage: Message = {
                         id: (Date.now() + 1).toString(),
-                        text: `✓ Object found! ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
+                        text: `Proceeding to found object: ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
                         sender: "system",
                         timestamp: new Date(),
                     };
                     setMessages((prev) => [...prev, successMessage]);
+                    sendGoalToRobot(data.objectLocation.x, data.objectLocation.y, data.objectLocation.yaw);
                     setContactVLM(false);
                     
                     // CRITICAL FIX #7: Clear search on backend for next search
@@ -268,11 +291,12 @@ export default function ChatBox() {
                     if (data.found) {
                         const systemMessage: Message = {
                             id: (Date.now() + 1).toString(),
-                            text: `✓ Goal found: ${data.goalLabel} at [x: ${data.goalPose?.x}, y: ${data.goalPose?.y}, yaw: ${data.goalPose?.yaw}]`,
+                            text: `Proceeding to found goal: ${data.goalLabel} at [x: ${data.goalPose?.x}, y: ${data.goalPose?.y}, yaw: ${data.goalPose?.yaw}]`,
                             sender: "system",
                             timestamp: new Date(),
                         };
                         setMessages((prev) => [...prev, systemMessage]);
+                        sendGoalToRobot(data.goalPose!.x, data.goalPose!.y, data.goalPose!.yaw);
                         setIsLoading(false);
                     } else {
                         const goalNotFoundMessage: Message = {
