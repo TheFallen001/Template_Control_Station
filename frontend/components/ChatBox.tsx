@@ -6,7 +6,7 @@ import { Send, Mic, Pause } from "lucide-react";
 import { useRosPublisher } from "@/lib/useRosPublisher";
 
 const BACKEND_URL = "http://localhost:8000";
-const pollRate = 2000; // Poll every 2 seconds
+const pollRate = 4000; // Poll every 2 seconds
 
 interface GoalPoseMsg {
     header: { frame_id: string };
@@ -156,6 +156,7 @@ export default function ChatBox() {
                 });
 
                 if (!response.ok) {
+                    console.log("Polling error: ", response.statusText);
                     const errorMessage: Message = {
                         id: Date.now().toString(),
                         text: "Error polling VLM endpoint",
@@ -171,65 +172,72 @@ export default function ChatBox() {
 
                 const data = (await response.json()) as vlmResponse;
 
-                // If object is found, stop polling and cleanup
-                if (data.found && data.objectLocation) {
-                    clearInterval(pollInterval);
-                    pollingIntervalRef.current = null;
-                    setIsLoading(false);
-
-                    const successMessage: Message = {
-                        id: (Date.now() + 1).toString(),
-                        text: `Proceeding to found object: ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
+                if(!data.identifiedObjectLabel || !data.objectLocation) {
+                    console.log("Polling error: Missing identified object label or coordinates.");
+                    const errorMessage: Message = {
+                        id: Date.now().toString(),
+                        text: "Error polling VLM endpoint, retrying in a moment...",
                         sender: "system",
                         timestamp: new Date(),
                     };
-                    setMessages((prev) => [...prev, successMessage]);
-                    sendGoalToRobot(data.objectLocation.x, data.objectLocation.y, data.objectLocation.yaw);
-                    setContactVLM(false);
-                    
-                    // CRITICAL FIX #7: Clear search on backend for next search
-                    try {
-                        await fetch(`${BACKEND_URL}/cancelSearch`, { method: "POST" });
-                    } catch (e) {
-                        console.error("Failed to clear search:", e);
-                    }
+                    setMessages((prev) => [...prev, errorMessage]);
                     return;
                 }
 
-                // If search is no longer active, stop polling and cleanup
-                if (!data.is_active) {
-                    clearInterval(pollInterval);
-                    pollingIntervalRef.current = null;
+                if (data.is_active) {
                     setIsLoading(false);
 
-                    const stoppedMessage: Message = {
-                        id: Date.now().toString(),
-                        text: "Search completed without finding the target object. Please try another search with a different description.",
-                        sender: "system",
-                        timestamp: new Date(),
-                    };
-                    setMessages((prev) => [...prev, stoppedMessage]);
-                    setContactVLM(false);
-                    
-                    // CRITICAL FIX #7: Clear search on backend for next search
-                    try {
-                        await fetch(`${BACKEND_URL}/cancelSearch`, { method: "POST" });
-                    } catch (e) {
-                        console.error("Failed to clear search:", e);
+                    if(data.found) {
+
+                        const foundMessage: Message = {
+                            id: (Date.now() + 1).toString(),
+                            text: `Proceeding to found object: ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
+                            sender: "system",
+                            timestamp: new Date(),
+                        };
+                        setMessages((prev) => [...prev, foundMessage]);
                     }
-                    return;
+                    else {
+                        const notFoundMessage: Message = {
+                            id: (Date.now() + 1).toString(),
+                            text: `Proceeding to possible object location: ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
+                            sender: "system",
+                            timestamp: new Date(),
+                        };
+                        setMessages((prev) => [...prev, notFoundMessage]);
+                    }
+                }
+                else {
+                    if(data.found) {
+
+                        const foundMessage: Message = {
+                            id: (Date.now() + 1).toString(),
+                            text: `Found object: ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
+                            sender: "system",
+                            timestamp: new Date(),
+                        };
+                        setMessages((prev) => [...prev, foundMessage]);
+                    }
+                    else {
+                        const notFoundMessage: Message = {
+                            id: (Date.now() + 1).toString(),
+                            text: `Could not find object. Last identified location: ${data.identifiedObjectLabel} at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
+                            sender: "system",
+                            timestamp: new Date(),
+                        };
+                        setMessages((prev) => [...prev, notFoundMessage]);
+                    }
+                    clearInterval(pollInterval);
+                    pollingIntervalRef.current = null;
+                    setContactVLM(false);
+                    setIsLoading(false);
+
                 }
 
-                // Still searching - show progress update
-                if (data.identifiedObjectLabel) {
-                    const updateMessage: Message = {
-                        id: Date.now().toString(),
-                        text: `Searching... Explored area with ${data.identifiedObjectLabel}`,
-                        sender: "system",
-                        timestamp: new Date(),
-                    };
-                    setMessages((prev) => [...prev, updateMessage]);
-                }
+                // sendGoalToRobot(data.objectLocation.x, data.objectLocation.y, data.objectLocation.yaw);
+                    
+                return;
+
             } catch (error) {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
@@ -353,11 +361,9 @@ export default function ChatBox() {
                     setIsLoading(false);
                     return;
                 }
-
-                const initialData = (await startResponse.json()) as vlmResponse;
                 
                 // Start polling /pollState for updates
-                await pollVLMUpdates();
+                pollVLMUpdates();
             } catch (error) {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
