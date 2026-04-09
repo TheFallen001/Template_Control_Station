@@ -6,7 +6,7 @@ import { Send, Mic, Pause } from "lucide-react";
 import { useRosPublisher } from "@/lib/useRosPublisher";
 
 const BACKEND_URL = "http://localhost:8000";
-const pollRate = 4000; // Poll every 2 seconds
+const pollRate = 4000; // Poll every 4 seconds
 
 interface GoalPoseMsg {
     header: { frame_id: string };
@@ -40,16 +40,33 @@ interface vlmResponse {
     identifiedObjectLabel?: string;
     objectLocation?: coordinates;
     is_active: boolean;
+    stepCount: number;
 }
+
+interface updateFileResponse{
+    success: boolean;
+    locationName: String;
+    coordinates: coordinates;
+}
+    
 
 export default function ChatBox() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputValue, setInputValue] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [taskCompleted, setTaskCompleted] = useState(false);
+    const [positionName, setPositionName] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    
 
     const [contactVLM, setContactVLM] = useState<boolean>(false);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    const [currentStep,setCurrentStep] = useState(-1);
+    const [robotPosition, setRobotPosition] = useState<coordinates>({x: 0, y: 0, yaw: 0});
+
+    const [backToStart, setBackToStart] = useState(false);
 
     const [isRecording, setIsRecording] = useState(false);
     const recognitionRef = useRef<any>(null);
@@ -164,9 +181,6 @@ export default function ChatBox() {
                         timestamp: new Date(),
                     };
                     setMessages((prev) => [...prev, errorMessage]);
-                    clearInterval(pollInterval);
-                    pollingIntervalRef.current = null;
-                    setIsLoading(false);
                     return;
                 }
 
@@ -186,6 +200,11 @@ export default function ChatBox() {
 
                 if (data.is_active) {
                     setIsLoading(false);
+                    if(currentStep == data.stepCount) {
+                        console.log(`Same step: ${data.stepCount}. Not returning a new message...`)
+                        return;
+                    }
+                    setCurrentStep(data.stepCount);
 
                     if(data.found) {
 
@@ -198,13 +217,26 @@ export default function ChatBox() {
                         setMessages((prev) => [...prev, foundMessage]);
                     }
                     else {
-                        const notFoundMessage: Message = {
-                            id: (Date.now() + 1).toString(),
-                            text: `Proceeding to possible object location: ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
-                            sender: "system",
-                            timestamp: new Date(),
-                        };
-                        setMessages((prev) => [...prev, notFoundMessage]);
+                        if(data.identifiedObjectLabel=="Obstruction Detected"){
+                            const notFoundMessage: Message = {
+                                id: (Date.now() + 1).toString(),
+                                text: `Obstruction Detected: Proceeding to [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
+                                sender: "system",
+                                timestamp: new Date(),
+                            };
+                            setMessages((prev) => [...prev, notFoundMessage]);
+
+                        }
+                        else {
+                            const notFoundMessage: Message = {
+                                id: (Date.now() + 1).toString(),
+                                text: `Proceeding to possible object location: ${data.identifiedObjectLabel} located at [x: ${data.objectLocation.x.toFixed(2)}, y: ${data.objectLocation.y.toFixed(2)}, yaw: ${data.objectLocation.yaw.toFixed(2)}]`,
+                                sender: "system",
+                                timestamp: new Date(),
+                            };
+                            setMessages((prev) => [...prev, notFoundMessage]);
+                        }
+                        
                     }
                 }
                 else {
@@ -231,6 +263,9 @@ export default function ChatBox() {
                     pollingIntervalRef.current = null;
                     setContactVLM(false);
                     setIsLoading(false);
+                    
+                    setTaskCompleted(true);
+                    setRobotPosition({x: data.objectLocation.x, y: data.objectLocation.y, yaw: data.objectLocation.yaw});
 
                 }
 
@@ -250,7 +285,7 @@ export default function ChatBox() {
                 pollingIntervalRef.current = null;
                 setIsLoading(false);
             }
-        }, pollRate); // Poll every 2 seconds
+        }, pollRate); // Poll every 4 seconds
 
         pollingIntervalRef.current = pollInterval;
     };
@@ -375,7 +410,119 @@ export default function ChatBox() {
                 setIsLoading(false);
             }
         }
-    }    
+    } 
+    
+    const handleSavePosition = async () => {
+        if (positionName.trim()) {
+             try {
+                const response = await fetch(`${BACKEND_URL}/updateFile`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        locationName: positionName,
+                        coordinates: {
+                            x: robotPosition.x,
+                            y: robotPosition.y,
+                            yaw: robotPosition.yaw,
+                        },
+                    }),
+                });
+                if (!response.ok) {
+                    const errorMessage: Message = {
+                        id: (Date.now() + 1).toString(),
+                        text: "Failed to save position",
+                        sender: "system",
+                        timestamp: new Date(),
+                    };
+                    setMessages((prev) => [...prev, errorMessage]);
+                    setIsLoading(false);
+                }
+                else {
+                    const data = (await response.json()) as updateFileResponse;
+                    console.log(`Saving position: ${data.locationName}`);
+                    const saveMessage: Message = {
+                        id: Date.now().toString(),
+                        text: `Position "${data.locationName}" at at [x: ${data.coordinates.x.toFixed(2)}, y: ${data.coordinates.y.toFixed(2)}, yaw: ${data.coordinates.yaw.toFixed(2)}] saved for future use.`,
+                        sender: "system",
+                        timestamp: new Date(),
+                    };
+                    setMessages((prev) => [...prev, saveMessage]);
+                    setTaskCompleted(false);
+                    setPositionName("");
+                }
+            } catch (error) {
+                const errorMessage: Message = {
+                    id: (Date.now() + 1).toString(),
+                    text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+                    sender: "system",
+                    timestamp: new Date(),
+                };
+                setMessages((prev) => [...prev, errorMessage]);
+                setIsLoading(false);
+            }
+        }
+    };
+
+    const handleDiscardPosition = () => {
+        setTaskCompleted(false);
+        setPositionName("");
+        setBackToStart(true);
+    };
+
+    const handleBackToStart = async () => {
+        
+        try {
+            const response = await fetch(`${BACKEND_URL}/getStartPoint`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!response.ok) {
+                const errorMessage: Message = {
+                    id: (Date.now() + 1).toString(),
+                    text: "Failed to get start point",
+                    sender: "system",
+                    timestamp: new Date(),
+                };
+                setMessages((prev) => [...prev, errorMessage]);
+                setIsLoading(false);
+            }
+            else {
+                const data = (await response.json()) as coordinates;
+                console.log(`Recieved start point: [x: ${data.x}, y: ${data.y}, yaw: ${data.yaw}]`);
+                sendGoalToRobot(data.x, data.y, data.yaw);
+                const saveMessage: Message = {
+                    id: Date.now().toString(),
+                    text: `Moving to Start point at [x: ${data.x.toFixed(2)}, y: ${data.y.toFixed(2)}, yaw: ${data.yaw.toFixed(2)}].`,
+                    sender: "system",
+                    timestamp: new Date(),
+                };
+                setMessages((prev) => [...prev, saveMessage]);
+                setBackToStart(false);
+
+            }
+        } catch (error) {
+            const errorMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+                sender: "system",
+                timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, errorMessage]);
+            setIsLoading(false);
+        }
+        
+    };
+
+    const handleDiscardBackToStart = () => {
+        setBackToStart(false);
+    };
+
+
     return (
         <motion.div
             initial={{ opacity: 0, x: 20 }}
@@ -592,6 +739,262 @@ export default function ChatBox() {
                     <Send size={16} />
                 </button>
             </form>
+
+            {/* Save Position Modal */}
+            {taskCompleted && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: "rgba(0, 0, 0, 0.5)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 1000,
+                    }}
+                >
+                    <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                        style={{
+                            backgroundColor: "var(--color-glass-bg)",
+                            border: "1px solid var(--color-glass-border)",
+                            borderRadius: "0.75rem",
+                            backdropFilter: "blur(10px)",
+                            padding: "2rem",
+                            maxWidth: "28rem",
+                            width: "90%",
+                            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+                        }}
+                    >
+                        <h2
+                            style={{
+                                margin: "0 0 1rem 0",
+                                fontSize: "1.25rem",
+                                fontWeight: "600",
+                                color: "var(--color-text-primary)",
+                            }}
+                        >
+                            Save Position
+                        </h2>
+                        <p
+                            style={{
+                                margin: "0 0 1.5rem 0",
+                                fontSize: "0.875rem",
+                                color: "var(--color-text-secondary)",
+                                lineHeight: "1.5",
+                            }}
+                        >
+                            Would you like to save the current position for future use?
+                        </p>
+                        <input
+                            type="text"
+                            value={positionName}
+                            onChange={(e) => setPositionName(e.target.value)}
+                            placeholder="Enter position name..."
+                            style={{
+                                width: "100%",
+                                padding: "0.75rem",
+                                marginBottom: "1.5rem",
+                                backgroundColor: "rgba(255, 255, 255, 0.04)",
+                                border: "1px solid var(--color-glass-border)",
+                                borderRadius: "0.375rem",
+                                color: "var(--color-text-primary)",
+                                fontSize: "0.875rem",
+                                boxSizing: "border-box",
+                                outline: "none",
+                                transition: "all 0.2s",
+                            }}
+                            onFocus={(e) => {
+                                e.currentTarget.style.borderColor = "rgba(37, 99, 235, 0.6)";
+                                e.currentTarget.style.backgroundColor = "rgba(37, 99, 235, 0.08)";
+                            }}
+                            onBlur={(e) => {
+                                e.currentTarget.style.borderColor = "var(--color-glass-border)";
+                                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.04)";
+                            }}
+                        />
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: "1rem",
+                                justifyContent: "flex-end",
+                            }}
+                        >
+                            <button
+                                onClick={handleDiscardPosition}
+                                style={{
+                                    padding: "0.625rem 1.5rem",
+                                    backgroundColor: "rgba(107, 114, 128, 0.5)",
+                                    border: "1px solid rgba(107, 114, 128, 0.5)",
+                                    borderRadius: "0.375rem",
+                                    color: "var(--color-text-primary)",
+                                    fontSize: "0.875rem",
+                                    fontWeight: "500",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.7)";
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.5)";
+                                }}
+                            >
+                                No
+                            </button>
+                            <button
+                                onClick={handleSavePosition}
+                                disabled={!positionName.trim()}
+                                style={{
+                                    padding: "0.625rem 1.5rem",
+                                    backgroundColor: positionName.trim()
+                                        ? "rgba(37, 99, 235, 0.6)"
+                                        : "rgba(37, 99, 235, 0.3)",
+                                    border: "1px solid rgba(37, 99, 235, 0.5)",
+                                    borderRadius: "0.375rem",
+                                    color: "var(--color-text-primary)",
+                                    fontSize: "0.875rem",
+                                    fontWeight: "500",
+                                    cursor: positionName.trim() ? "pointer" : "not-allowed",
+                                    transition: "all 0.2s",
+                                    opacity: positionName.trim() ? 1 : 0.6,
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (positionName.trim()) {
+                                        e.currentTarget.style.backgroundColor = "rgba(37, 99, 235, 0.8)";
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (positionName.trim()) {
+                                        e.currentTarget.style.backgroundColor = "rgba(37, 99, 235, 0.6)";
+                                    }
+                                }}
+                            >
+                                Yes
+                            </button>
+                        </div>
+                    </motion.div>
+                </motion.div>
+            )}
+
+            {/* Save Position Modal */}
+            {backToStart && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: "rgba(0, 0, 0, 0.5)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 1000,
+                    }}
+                >
+                    <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                        style={{
+                            backgroundColor: "var(--color-glass-bg)",
+                            border: "1px solid var(--color-glass-border)",
+                            borderRadius: "0.75rem",
+                            backdropFilter: "blur(10px)",
+                            padding: "2rem",
+                            maxWidth: "28rem",
+                            width: "90%",
+                            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+                        }}
+                    >
+                        <h2
+                            style={{
+                                margin: "0 0 1rem 0",
+                                fontSize: "1.25rem",
+                                fontWeight: "600",
+                                color: "var(--color-text-primary)",
+                            }}
+                        >
+                            Back to Start Position
+                        </h2>
+                        <p
+                            style={{
+                                margin: "0 0 1.5rem 0",
+                                fontSize: "0.875rem",
+                                color: "var(--color-text-secondary)",
+                                lineHeight: "1.5",
+                            }}
+                        >
+                            Would you like to go back to start position?
+                        </p>
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: "1rem",
+                                justifyContent: "flex-end",
+                            }}
+                        >
+                            <button
+                                onClick={handleDiscardBackToStart}
+                                style={{
+                                    padding: "0.625rem 1.5rem",
+                                    backgroundColor: "rgba(107, 114, 128, 0.5)",
+                                    border: "1px solid rgba(107, 114, 128, 0.5)",
+                                    borderRadius: "0.375rem",
+                                    color: "var(--color-text-primary)",
+                                    fontSize: "0.875rem",
+                                    fontWeight: "500",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.7)";
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.5)";
+                                }}
+                            >
+                                No
+                            </button>
+                            <button
+                                onClick={handleBackToStart}
+                                style={{
+                                    padding: "0.625rem 1.5rem",
+                                    backgroundColor:"rgba(37, 99, 235, 0.6)",
+                                    border: "1px solid rgba(37, 99, 235, 0.5)",
+                                    borderRadius: "0.375rem",
+                                    color: "var(--color-text-primary)",
+                                    fontSize: "0.875rem",
+                                    fontWeight: "500",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                    opacity: 1,
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = "rgba(37, 99, 235, 0.8)";
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = "rgba(37, 99, 235, 0.6)";
+                                }}
+                            >
+                                Yes
+                            </button>
+                        </div>
+                    </motion.div>
+                </motion.div>
+            )}
         </motion.div>
     );
 }
