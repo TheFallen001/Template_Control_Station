@@ -54,18 +54,18 @@ export default function ChatBox() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputValue, setInputValue] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [taskCompleted, setTaskCompleted] = useState(false);
     const [positionName, setPositionName] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
-
     
-
+    
+    
     const [contactVLM, setContactVLM] = useState<boolean>(false);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
+    
     const [currentStep,setCurrentStep] = useState(-1);
     const [robotPosition, setRobotPosition] = useState<coordinates>({x: 0, y: 0, yaw: 0});
-
+    
+    const [taskCompleted, setTaskCompleted] = useState(true);
     const [backToStart, setBackToStart] = useState(false);
 
     const [isRecording, setIsRecording] = useState(false);
@@ -451,6 +451,7 @@ export default function ChatBox() {
                     setMessages((prev) => [...prev, saveMessage]);
                     setTaskCompleted(false);
                     setPositionName("");
+                    setBackToStart(true)
                 }
             } catch (error) {
                 const errorMessage: Message = {
