@@ -1,11 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
+import type { Variants } from "framer-motion";
 import MapViewer from "@/components/MapViewer";
 import ChatBox from "@/components/ChatBox";
 
 export default function MissionControlSection() {
-    const containerVariants = {
+    const containerVariants: Variants = {
         hidden: {},
         visible: {
             transition: { staggerChildren: 0.1, delayChildren: 0.05 },
@@ -15,7 +16,7 @@ export default function MissionControlSection() {
         },
     };
 
-    const widgetVariants = {
+    const widgetVariants: Variants = {
         hidden: { opacity: 0, y: 20, scale: 0.97 },
         visible: {
             opacity: 1, y: 0, scale: 1,
