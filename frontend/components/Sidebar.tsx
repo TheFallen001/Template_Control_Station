@@ -1,16 +1,19 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { LayoutDashboard, Cpu, Map, Settings } from "lucide-react";
+import { LayoutDashboard, Cpu, Map, Settings, Camera, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/lib/ThemeContext";
 
 export type Section = "overview" | "sensors" | "mission_control";
 
 interface SidebarProps {
     activeSection: Section;
     onSelect: (section: Section) => void;
+    onCameraClick?: () => void;
 }
 
-export default function Sidebar({ activeSection, onSelect }: SidebarProps) {
+export default function Sidebar({ activeSection, onSelect, onCameraClick }: SidebarProps) {
+    const { theme, toggleTheme } = useTheme();
     const items = [
         { id: "overview", label: "Overview", icon: LayoutDashboard },
         { id: "sensors", label: "Sensors", icon: Cpu },
@@ -57,8 +60,6 @@ export default function Sidebar({ activeSection, onSelect }: SidebarProps) {
                             <motion.button
                                 key={item.id}
                                 onClick={() => onSelect(item.id as Section)}
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.95 }}
                                 style={{
                                     background: "none",
                                     border: "none",
@@ -97,8 +98,83 @@ export default function Sidebar({ activeSection, onSelect }: SidebarProps) {
                 </div>
             </div>
 
-            {/* Bottom spacer or additional options could go here */}
-            <div />
+            <div style={{ gap: "1.5rem", display: "flex", flexDirection: "column" }}>
+                {/* Camera Button */}
+                <motion.button
+                    onClick={onCameraClick}
+                    style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        position: "relative",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 48,
+                        height: 48,
+                        borderRadius: "12px",
+                        color: "var(--color-text-muted)",
+                        transition: "color 0.2s ease",
+                        userSelect: "none"
+                    }}
+                    title="Camera Stream"
+                >
+                    <div
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            background: "transparent",
+                            border: "1px solid rgba(59,130,246,0.2)",
+                            borderRadius: "12px",
+                            transition: "all 0.2s ease",
+                            pointerEvents: "none"
+                        }}
+                        className="camera-button-bg"
+                    />
+                    <Camera size={22} style={{ zIndex: 1 }} />
+                </motion.button>
+
+                {/* Theme Toggle Button */}
+                <motion.button
+                    onClick={toggleTheme}
+                    style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        position: "relative",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 48,
+                        height: 48,
+                        borderRadius: "12px",
+                        color: "var(--color-text-muted)",
+                        transition: "color 0.2s ease",
+                        userSelect: "none"
+                    }}
+                    title={theme === "dark" ? "Light Mode" : "Dark Mode"}
+                >
+                    <div
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            background: "transparent",
+                            border: "1px solid rgba(59,130,246,0.2)",
+                            borderRadius: "12px",
+                            transition: "all 0.2s ease",
+                            pointerEvents: "none"
+                        }}
+                        className="theme-button-bg"
+                    />
+                    {theme === "dark" ? (
+                        <Sun size={22} style={{ zIndex: 1 }} />
+                    ) : (
+                        <Moon size={22} style={{ zIndex: 1 }} />
+                    )}
+                </motion.button>
+            </div>
         </motion.div>
     );
 }

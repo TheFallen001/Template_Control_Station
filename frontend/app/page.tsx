@@ -1,5 +1,6 @@
 "use client";
 
+import CameraStream from "@/components/CameraStream";
 import MissionControlSection from "@/components/MissionControlSection";
 import OverviewSection from "@/components/OverviewSection";
 import SensorsSection from "@/components/SensorsSection";
@@ -78,6 +79,7 @@ function StatusPill({ status, url }: { status: string; url: string }) {
 export default function RobotDashboard() {
   const { status, url } = useRos();
   const [activeSection, setActiveSection] = useState<Section>("overview");
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   return (
     <>
@@ -91,7 +93,7 @@ export default function RobotDashboard() {
         overflow: "hidden"
       }}>
         {/* Sidebar */}
-        <Sidebar activeSection={activeSection} onSelect={setActiveSection} />
+        <Sidebar activeSection={activeSection} onSelect={setActiveSection} onCameraClick={() => setIsCameraOpen(true)} />
 
         {/* Main Content Area */}
         <div style={{
@@ -155,6 +157,11 @@ export default function RobotDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Camera Stream Overlay */}
+      <AnimatePresence>
+        <CameraStream isOpen={isCameraOpen} onClose={() => setIsCameraOpen(false)} />
+      </AnimatePresence>
     </>
   );
 }

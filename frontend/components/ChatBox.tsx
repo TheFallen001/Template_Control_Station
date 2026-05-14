@@ -64,10 +64,10 @@ export default function ChatBox() {
     const [positionName, setPositionName] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
     
-    
-    
     const [contactVLM, setContactVLM] = useState<boolean>(false);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    const [lastMessage,setLastMessage] = useState<vlmResponse | null>(null);
     
     const [currentStep,setCurrentStep] = useState(-1);
     const [robotPosition, setRobotPosition] = useState<coordinates>({x: 0, y: 0, yaw: 0});
@@ -192,7 +192,13 @@ export default function ChatBox() {
                 }
 
                 const data = (await response.json()) as vlmResponse;
-
+                
+                if(lastMessage && JSON.stringify(data) === JSON.stringify(lastMessage)) {
+                    console.log("Polling response is the same as last message, skipping update...");
+                    setLastMessage(data);
+                    return; // No change in data, skip processing
+                }
+                
                 if(!data.identifiedObjectLabel || !data.objectLocation) {
                     console.log("Polling error: Missing identified object label or coordinates.");
                     const errorMessage: Message = {
@@ -277,7 +283,7 @@ export default function ChatBox() {
                 }
 
                 // sendGoalToRobot(data.objectLocation.x, data.objectLocation.y, data.objectLocation.yaw);
-                    
+                setLastMessage(data);
                 return;
 
             } catch (error) {

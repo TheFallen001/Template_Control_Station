@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
 /* =========================================================
-   GLASSMORPHIC INDUSTRIAL — Design System
+   GLASSMORPHIC INDUSTRIAL — Design System with Theme Support
    ========================================================= */
 
-@theme inline {
+/* Dark Theme (Default) */
+:root, html[data-theme="dark"] {
   /* --- Color Palette --- */
   --color-bg-base: #080c14;
   --color-bg-mesh-1: #0d1524;
@@ -45,6 +46,44 @@
   --font-mono: var(--font-geist-mono), "JetBrains Mono", monospace;
 }
 
+/* Light Theme */
+html[data-theme="light"] {
+  /* --- Color Palette --- */
+  --color-bg-base: #f8fafc;
+  --color-bg-mesh-1: #f1f5f9;
+  --color-bg-mesh-2: #e2e8f0;
+
+  /* Electric Blue — primary / navigation */
+  --color-blue-primary: #2563eb;
+  --color-blue-glow: #1e40af;
+  --color-blue-muted: rgba(37, 99, 235, 0.1);
+
+  /* Amber — warnings */
+  --color-amber-primary: #f59e0b;
+  --color-amber-glow: #d97706;
+  --color-amber-muted: rgba(245, 158, 11, 0.1);
+
+  /* Emerald — status / connected */
+  --color-emerald-primary: #10b981;
+  --color-emerald-glow: #059669;
+  --color-emerald-muted: rgba(16, 185, 129, 0.1);
+
+  /* Ruby — collision / emergency */
+  --color-ruby-primary: #dc2626;
+  --color-ruby-glow: #b91c1c;
+  --color-ruby-muted: rgba(220, 38, 38, 0.1);
+
+  /* Glass surface */
+  --color-glass-bg: rgba(15, 23, 42, 0.05);
+  --color-glass-border: rgba(15, 23, 42, 0.1);
+  --color-glass-shine: rgba(255, 255, 255, 0.8);
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+}
+
 /* ---- Base ---- */
 *,
 *::before,
@@ -75,7 +114,31 @@ body {
 }
 
 
-/* ---- Deep obsidian mesh gradient background ---- */
+/* ---- Deep obsidian mesh gradient background (dark theme) ---- */
+html[data-theme="dark"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(37, 99, 235, 0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(16, 185, 129, 0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 60% at 50% 50%, #0d1524 0%, #060a10 100%);
+}
+
+/* ---- Light gradient background (light theme) ---- */
+html[data-theme="light"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(37, 99, 235, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(16, 185, 129, 0.04) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 60% at 50% 50%, #f1f5f9 0%, #e2e8f0 100%);
+}
+
+/* ---- Default (dark) gradient ---- */
 body::before {
   content: "";
   position: fixed;
@@ -87,7 +150,29 @@ body::before {
     radial-gradient(ellipse 70% 60% at 50% 50%, #0d1524 0%, #060a10 100%);
 }
 
-/* ---- Subtle dot-grid overlay ---- */
+/* ---- Subtle dot-grid overlay (dark theme) ---- */
+html[data-theme="dark"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+}
+
+/* ---- Subtle dot-grid overlay (light theme) ---- */
+html[data-theme="light"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+}
+
+/* ---- Default (dark) dot-grid ---- */
 body::after {
   content: "";
   position: fixed;
@@ -101,6 +186,14 @@ body::after {
 /* =========================================================
    Utility classes used by components
    ========================================================= */
+
+/* Prevent text selection on buttons and interactive elements */
+button {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
 
 /* Glass card */
 .glass-card {
