@@ -5,7 +5,14 @@ import { motion } from "framer-motion";
 import { Send, Mic, Pause } from "lucide-react";
 import { useRosPublisher } from "@/lib/useRosPublisher";
 
-const BACKEND_URL = "http://localhost:8000";
+const getBackendUrl = () => {
+  if (typeof window !== "undefined") {
+    return `http://${window.location.hostname}:8000`;
+  }
+  return "http://localhost:8000";
+};
+
+const BACKEND_URL = getBackendUrl();
 const pollRate = 4000; // Poll every 4 seconds
 
 interface GoalPoseMsg {
@@ -65,7 +72,7 @@ export default function ChatBox() {
     const [currentStep,setCurrentStep] = useState(-1);
     const [robotPosition, setRobotPosition] = useState<coordinates>({x: 0, y: 0, yaw: 0});
     
-    const [taskCompleted, setTaskCompleted] = useState(true);
+    const [taskCompleted, setTaskCompleted] = useState(false);
     const [backToStart, setBackToStart] = useState(false);
 
     const [isRecording, setIsRecording] = useState(false);

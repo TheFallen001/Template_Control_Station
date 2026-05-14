@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-
-const STREAM_URL = "http://localhost:8080/stream?topic=/depth_camera/image";
 
 export default function HUD() {
     // Track if the stream is loading, error, or success
-    const [status, setStatus] = useState("loading"); // loading, error, success
+    const [status, setStatus] = useState("loading"); 
+    
+    // Hold the dynamic URL in state to avoid Next.js build errors
+    const [streamUrl, setStreamUrl] = useState<string>("");
+
+    useEffect(() => {
+        // Dynamically grab the Tailscale or Local Wi-Fi IP the browser is using
+        // Port 8080 is standard for ROS web_video_server
+        setStreamUrl(`http://${window.location.hostname}:8080/stream?topic=/camera/color/image_raw`);
+    }, []);
 
     return (
         <div className="glass-card" style={{ 
@@ -15,22 +22,25 @@ export default function HUD() {
             overflow: "hidden", 
             aspectRatio: "16/9", 
             width: "100%",
-            background: "#080c14" // Solid background to prevent flickering
+            background: "#080c14" 
         }}>
             
             {/* 1. Live Video Stream */}
-            <img
-                src={STREAM_URL}
-                alt="Depth camera stream"
-                style={{ 
-                    width: "100%", 
-                    height: "100%", 
-                    objectFit: "cover", 
-                    display: status === "success" ? "block" : "none" 
-                }}
-                onLoad={() => setStatus("success")}
-                onError={() => setStatus("error")}
-            />
+            {/* Only render the image tag once we have safely generated the URL on the client */}
+            {streamUrl && (
+                <img
+                    src={streamUrl}
+                    alt="Depth camera stream"
+                    style={{ 
+                        width: "100%", 
+                        height: "100%", 
+                        objectFit: "cover", 
+                        display: status === "success" ? "block" : "none" 
+                    }}
+                    onLoad={() => setStatus("success")}
+                    onError={() => setStatus("error")}
+                />
+            )}
 
             {/* 2. Fallback UI - Visible when error or loading */}
             <AnimatePresence>

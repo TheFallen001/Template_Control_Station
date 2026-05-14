@@ -41,8 +41,14 @@ const RosContext = createContext<RosContextValue>({
 // Provider
 // ---------------------------------------------------------------------------
 
-const ROS_URL =
-    process.env.NEXT_PUBLIC_ROS_URL ?? "ws://localhost:9090";
+const getRosUrl = () => {
+    // Only access 'window' if we are in the browser
+    if (typeof window !== "undefined") {
+        return process.env.NEXT_PUBLIC_ROS_URL ?? `ws://${window.location.hostname}:9090`;
+    }
+    // Safe fallback for the Node.js build environment
+    return process.env.NEXT_PUBLIC_ROS_URL ?? "ws://localhost:9090"; 
+};
 
 /** Milliseconds to wait before attempting a reconnect after a close/error */
 const RECONNECT_DELAY_MS = 3_000;
@@ -77,7 +83,7 @@ export function RosProvider({ children }: { children: ReactNode }) {
         import("roslib").then(({ Ros }) => {
             if (!mountedRef.current) return;
 
-            const instance = new Ros({ url: ROS_URL });
+            const instance = new Ros({ url: getRosUrl() });
             rosRef.current = instance;
 
             instance.on("connection", () => {
@@ -132,7 +138,7 @@ export function RosProvider({ children }: { children: ReactNode }) {
     }, [connect]);
 
     return (
-        <RosContext.Provider value={{ ros, status, reconnect, url: ROS_URL }}>
+        <RosContext.Provider value={{ ros, status, reconnect, url: getRosUrl() }}>
             {children}
         </RosContext.Provider>
     );
